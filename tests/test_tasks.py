@@ -144,6 +144,13 @@ class TestUnhandledExceptions:
         assert "sensitive details" not in response.text
 
 
+class TestMetrics:
+    def test_metrics_endpoint_exposed(self, client):
+        response = client.get("/metrics")
+        assert response.status_code == 200
+        assert "http_requests_total" in response.text
+
+
 class TestRateLimiting:
     def test_exceeding_write_rate_limit_returns_429(self, client):
         for _ in range(30):

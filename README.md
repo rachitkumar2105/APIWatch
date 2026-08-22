@@ -122,7 +122,7 @@ docker compose up
 
 The dashboard (`grafana/provisioning/dashboards/apiwatch.json`) is auto-provisioned on startup and tracks requests/sec, error rate (5xx/sec), latency p50/p95, and requests by status code — built against the actual metric names `prometheus-fastapi-instrumentator` exposes (`http_requests_total`, `http_request_duration_seconds_bucket`, `http_request_duration_highr_seconds_bucket`), confirmed by curling a running `/metrics` endpoint.
 
-**Docker Compose itself was not run end-to-end during this build** — Docker Desktop's daemon didn't come up in the build environment. What *was* verified: `docker compose config` parses both `docker-compose.yml` and `prometheus.yml` without error, and the Grafana dashboard JSON is valid JSON with queries matched to real, observed metric names. Before relying on this for a demo or an interview, run `docker compose up` yourself, open Grafana, and confirm the dashboard actually renders live data.
+**Verified end-to-end by Rachit:** `docker compose up` brings up all three containers (api, prometheus, grafana) cleanly. Prometheus's Data Sources page shows the connection configured correctly (`http://prometheus:9090`, marked default). The APIWatch dashboard auto-provisions and loads on first open, showing all 4 panels (Requests/sec, Error Rate (5xx)/sec, Latency p50/p95, Requests by Status Code). Running `python scripts/loadtest.py` while the stack was up made the dashboard update live: Requests/sec climbed from 0 to ~0.2, p50/p95 latency showed real millisecond values consistent with the numbers in the "Measured latency" section below, and Requests by Status Code showed 2xx responses. Error Rate (5xx)/sec correctly showed "No data," since there were zero server errors to plot. After `docker compose down`, the dashboard fell back to "Failed to fetch" / "No data," confirming the earlier readings were live, not cached.
 
 ### Measured latency
 
@@ -150,7 +150,6 @@ Written down explicitly rather than glossed over:
 - **No real load testing.** `scripts/loadtest.py` is a simple sequential-request script, not a concurrent load-testing tool. A proper load test (e.g. Locust, with many concurrent virtual users) would be the next step before quoting a throughput number.
 - **Single instance only.** No horizontal scaling, no load balancer, no distributed rate-limit store (slowapi's default limiter is in-process — multiple instances would each enforce their own 30/minute independently, not a shared limit).
 - **SQLite, not Postgres.** Fine for a demo; the ORM layer is structured so swapping `DATABASE_URL` to a Postgres connection string is the only change needed, but this was never actually tested against Postgres.
-- **`docker compose up` was not verified end-to-end** in the build environment (see Observability section above) — verify it yourself before using the dashboard as proof of anything.
 
 ## Why this exists
 

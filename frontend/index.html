@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>APIWatch</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <p class="kicker">Task Management REST API</p>
+      <h1>APIWatch</h1>
+      <p class="lede">
+        A task-management REST API built with automated testing, CI/CD, and
+        production-style observability.
+      </p>
+    </header>
+
+    <section id="architecture">
+      <h2>Architecture</h2>
+      <div class="diagram">                 ┌─────────────┐
+  Client ──────► │   FastAPI   │ ──────► SQLAlchemy ──────► SQLite
+                 │ (app/main)  │
+                 └──────┬──────┘
+                        │ /metrics
+                        ▼
+                 ┌─────────────┐        ┌─────────┐
+                 │ Prometheus  │ ─────► │ Grafana │
+                 │ (scrapes    │        │(dashboard)
+                 │  every 5s)  │        └─────────┘
+                 └─────────────┘</div>
+    </section>
+
+    <section id="stack">
+      <h2>Tech Stack</h2>
+      <ul class="stack-list">
+        <li>FastAPI<span class="role">API framework</span></li>
+        <li>SQLAlchemy<span class="role">ORM (SQLite)</span></li>
+        <li>Pydantic<span class="role">Validation / schemas</span></li>
+        <li>pytest<span class="role">Automated testing</span></li>
+        <li>GitHub Actions<span class="role">CI, coverage + lint gate</span></li>
+        <li>ruff / black<span class="role">Lint / format</span></li>
+        <li>slowapi<span class="role">Rate limiting</span></li>
+        <li>Prometheus<span class="role">Metrics scraping</span></li>
+        <li>Grafana<span class="role">Dashboards</span></li>
+        <li>Docker Compose<span class="role">Local observability stack</span></li>
+      </ul>
+    </section>
+
+    <section id="docs">
+      <h2>API Docs</h2>
+      <div class="card">
+        <p style="margin-top:0">
+          Not deployed anywhere reachable right now — run it locally and the
+          interactive Swagger UI comes up at <code>/docs</code>.
+        </p>
+        <div class="actions">
+          <a class="btn primary" href="https://github.com/rachitkumar2105/APIWatch#running-locally">
+            Run locally — see README
+          </a>
+          <a class="btn" href="https://github.com/rachitkumar2105/APIWatch">
+            View source on GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section id="quality">
+      <h2>Test Coverage &amp; CI</h2>
+      <div class="card">
+        <div class="metric-row">
+          <div class="metric">
+            <div class="value">97.35%</div>
+            <div class="label">Coverage</div>
+          </div>
+          <div class="metric">
+            <div class="value">21</div>
+            <div class="label">Tests passing</div>
+          </div>
+          <div class="metric">
+            <div class="value">85%</div>
+            <div class="label">CI floor</div>
+          </div>
+        </div>
+        <div class="badge-row">
+          <a href="https://github.com/rachitkumar2105/APIWatch/actions/workflows/ci.yml">
+            <img
+              src="https://github.com/rachitkumar2105/APIWatch/actions/workflows/ci.yml/badge.svg"
+              alt="CI status"
+              width="90"
+              height="20"
+            />
+          </a>
+        </div>
+        <p class="note">
+          Coverage and test count are from the last local run
+          (<code>pytest --cov=app --cov-report=term-missing</code>); the badge
+          above reflects the live GitHub Actions status once this repo is pushed.
+        </p>
+      </div>
+    </section>
+
+    <footer>
+      <span>Rachit Kumar Singh</span>
+      <a href="https://github.com/rachitkumar2105/APIWatch">github.com/rachitkumar2105/APIWatch</a>
+    </footer>
+  </div>
+</body>
+</html>

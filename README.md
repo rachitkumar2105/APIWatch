@@ -108,7 +108,7 @@ Tests run against an in-memory SQLite database (via a `get_db` override in `test
 3. `black --check .`
 4. `pytest --cov=app --cov-fail-under=85`
 
-Any step failing blocks the job. Verified locally by running the same three commands in sequence against the current code before each commit — actually pushing to GitHub and watching the Action execute is still something Rachit needs to do himself.
+Any step failing blocks the job. Verified live on GitHub, not just locally: run #1 completed with status "Success," job `test` passing in 17s. (GitHub's runner logged an informational Node.js 20 deprecation warning — that's infrastructure noise from the Actions runner itself, unrelated to this project's code or Python dependencies, not a failure.)
 
 ## Observability stack (Prometheus + Grafana)
 

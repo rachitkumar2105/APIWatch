@@ -5,6 +5,9 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app import crud
@@ -30,6 +33,11 @@ app.add_middleware(
 )
 
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     # Never leak stack traces or raw DB errors to the client — log server-side, return generic 500.
@@ -38,7 +46,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 @app.post("/tasks", response_model=TaskRead, status_code=201)
-def create_task(task: TaskCreate, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def create_task(request: Request, task: TaskCreate, db: Session = Depends(get_db)):
     return crud.create_task(db, task)
 
 
@@ -63,7 +72,8 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/tasks/{task_id}", response_model=TaskRead)
-def update_task(task_id: int, task: TaskUpdate, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def update_task(request: Request, task_id: int, task: TaskUpdate, db: Session = Depends(get_db)):
     db_task = crud.update_task(db, task_id, task)
     if db_task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -71,7 +81,8 @@ def update_task(task_id: int, task: TaskUpdate, db: Session = Depends(get_db)):
 
 
 @app.delete("/tasks/{task_id}", status_code=204)
-def delete_task(task_id: int, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def delete_task(request: Request, task_id: int, db: Session = Depends(get_db)):
     deleted = crud.delete_task(db, task_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Task not found")

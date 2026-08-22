@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
-from app.main import app
+from app.main import app, limiter
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
 
@@ -31,6 +31,7 @@ app.dependency_overrides[get_db] = override_get_db
 @pytest.fixture(autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine)
+    limiter.reset()
     yield
     Base.metadata.drop_all(bind=engine)
 

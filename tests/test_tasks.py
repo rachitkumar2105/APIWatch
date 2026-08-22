@@ -144,6 +144,15 @@ class TestUnhandledExceptions:
         assert "sensitive details" not in response.text
 
 
+class TestRateLimiting:
+    def test_exceeding_write_rate_limit_returns_429(self, client):
+        for _ in range(30):
+            response = create_sample_task(client)
+            assert response.status_code == 201
+        blocked = create_sample_task(client)
+        assert blocked.status_code == 429
+
+
 class TestCors:
     def test_preflight_allows_configured_origin(self, client):
         response = client.options(

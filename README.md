@@ -47,7 +47,7 @@ scripts/
 docker-compose.yml                # api + Prometheus + Grafana
 prometheus.yml                      # Scrape config
 grafana/provisioning/                 # Auto-provisioned datasource + dashboard
-.env.example                            # DATABASE_URL / CORS_ORIGINS placeholders
+.env.example                            # DATABASE_URL / CORS_ORIGINS / GRAFANA_ADMIN_PASSWORD placeholders
 ```
 
 ## Running locally
@@ -118,7 +118,7 @@ docker compose up
 
 - API: http://localhost:8000
 - Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000 (login `admin` / `admin`)
+- Grafana: http://localhost:3000 (login `admin` / `admin` by default — set `GRAFANA_ADMIN_PASSWORD` in `.env` to change it)
 
 The dashboard (`grafana/provisioning/dashboards/apiwatch.json`) is auto-provisioned on startup and tracks requests/sec, error rate (5xx/sec), latency p50/p95, and requests by status code — built against the actual metric names `prometheus-fastapi-instrumentator` exposes (`http_requests_total`, `http_request_duration_seconds_bucket`, `http_request_duration_highr_seconds_bucket`), confirmed by curling a running `/metrics` endpoint.
 

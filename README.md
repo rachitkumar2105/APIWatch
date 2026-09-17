@@ -13,7 +13,7 @@ FastAPI + SQLite (Postgres-compatible, verified) REST API for managing tasks (cr
 - **Optimistic concurrency control** — every task carries a `version`; a `PUT` must supply the version it read, and a stale version is rejected with `409 Conflict` instead of silently overwriting a concurrent change.
 - **Health checks** — `/health/live` (process up) and `/health/ready` (database actually reachable) for real deployment readiness/liveness probes.
 - **Automated testing** — pytest, 49 tests covering happy paths, error paths, ownership isolation, idempotency, version conflicts, and health-check failure modes, run against an isolated in-memory database.
-- **CI with coverage + lint gating** — GitHub Actions runs `ruff`, `black --check`, and the full test suite with `--cov-fail-under=85` on every push (currently at 99%).
+- **CI with coverage + lint gating** — GitHub Actions runs `ruff`, `black --check`, and the full test suite with `--cov-fail-under=85` on every push (currently at 98.63%).
 - **Observability** — `prometheus-fastapi-instrumentator` exposes request count, latency histograms, and error rate at `/metrics`; a Prometheus + Grafana stack (via Docker Compose) visualizes them.
 - **Baseline security hygiene** — Pydantic validation on every request body, ORM-only DB access, an explicit CORS allow-list, a global exception handler that never leaks stack traces, and rate limiting on write and auth endpoints.
 
@@ -113,7 +113,7 @@ Errors: `401` for missing/invalid credentials, `404` for a missing (or not-owned
 pytest --cov=app --cov-report=term-missing
 ```
 
-Last measured run: **49 passed, 99% coverage.** (Grew from an earlier 21-test/97.35% baseline as auth, idempotency, optimistic locking, and health checks were added — each with its own dedicated test file.) The only uncovered lines are `get_db`'s `try/finally` in `app/database.py` — tests override that dependency entirely (standard FastAPI `TestClient` pattern), so the real generator body never executes under test.
+Last measured run: **49 passed, 98.63% coverage.** (Grew from an earlier 21-test/97.35% baseline as auth, idempotency, optimistic locking, and health checks were added — each with its own dedicated test file.) The only uncovered lines are `get_db`'s `try/finally` in `app/database.py` — tests override that dependency entirely (standard FastAPI `TestClient` pattern), so the real generator body never executes under test.
 
 Tests run against an in-memory SQLite database (via a `get_db` override in `tests/conftest.py`), reset per test, with no ordering dependency. An `auth_client` fixture pre-registers and logs in a user so most tests don't need to repeat the auth flow; `test_auth.py` tests that flow directly. The rate limiter is reset between tests so write-heavy tests don't trip the 429 threshold unintentionally.
 
@@ -153,27 +153,31 @@ Real runs against `GET /tasks`, authenticated, local single instance:
 
 | Concurrency | p50 | p95 | p99 | mean | errors |
 |---|---|---|---|---|---|
-| 1 (sequential) | 3.14 ms | 10.52 ms | 19.52 ms | 3.81 ms | 0 / 100 |
-| 20 (concurrent) | 254.22 ms | 414.59 ms | 537.39 ms | 259.76 ms | 0 / 200 |
+| 1 (sequential) | 20.14 ms | 33.95 ms | 43.87 ms | 18.44 ms | 0 / 100 |
+| 20 (concurrent) | 7.73 ms | 46.54 ms | 67.43 ms | 14.41 ms | 0 / 200 |
 
-The concurrent numbers are measured on a **1-vCPU test environment** — the absolute latency reflects that constraint as much as the code itself, and is reported here rather than omitted or run only under conditions flattering to the number. The honest takeaway: this single-instance, synchronous, SQLite-backed design shows real, measurable contention under concurrent load — exactly the kind of finding that motivates the "single instance only, no shared state" limitation below, and the horizontal-scaling path (stateless design, so scaling out doesn't require a rewrite) it's built to support.
+These numbers are **hardware- and OS-dependent, not universal constants** — an earlier run of this same script on different hardware measured p50 254ms/p95 415ms at 20-way concurrency, over 30x higher than the numbers above. Both are real, measured results; neither is "the" correct number for this API. The script itself opens a fresh HTTP connection per request (no connection pooling in the client), so on Windows especially, per-connection setup overhead is a real component of what's being measured here, not pure server-side latency — worth knowing before quoting either number as a throughput ceiling. The honest takeaway is qualitative, not the exact digits: this single-instance, synchronous, SQLite-backed design behaves reasonably under modest concurrent load, and the real bottleneck at scale would be the single-instance rate limiter and connection handling, not raw request latency.
 
 ## Database portability (SQLite ↔ Postgres)
 
-The `DATABASE_URL` swap is not just a theoretical claim — it was run end-to-end against a real local PostgreSQL 16 instance:
+The `DATABASE_URL` swap is not just a theoretical claim — it was run end-to-end against a real Postgres 16 instance (a disposable Docker container, not a shared/persistent one):
 
 ```bash
+pip install psycopg2-binary   # not needed for SQLite; required only for Postgres
 export DATABASE_URL="postgresql://postgres:<password>@localhost:5432/apiwatch"
 uvicorn app.main:app
 ```
 
-Verified with no code changes beyond the environment variable: table creation (`Base.metadata.create_all`), user registration + JWT login, task creation, filtered listing, idempotent `POST` retries, optimistic-locking `409` conflicts, deletion, and cross-user ownership isolation — all confirmed directly via `psql` against the live Postgres database, not just via the app's own responses.
+Note the driver: SQLAlchemy needs `psycopg2` (or another Postgres DBAPI driver) to talk to Postgres at all — it's now pinned in `requirements.txt`, but it's worth calling out explicitly since "just change `DATABASE_URL`" undersells it slightly without this.
+
+Verified with no application code changes beyond the environment variable and that one added dependency: table creation (`Base.metadata.create_all`), user registration + JWT login, task creation, filtered listing, idempotent `POST` retries, an optimistic-locking `200` → `409` sequence, cross-user ownership isolation (404, not a leak), and deletion — then confirmed directly via `psql` against the live Postgres database (not just the app's own responses) that the `users`, `tasks`, and `idempotency_keys` tables existed with the expected rows.
 
 ## Known limitations
 
-Written down explicitly rather than glossed over — this list is intentionally short now:
+Written down explicitly rather than glossed over:
 
-- **Not deployed live, by choice.** This is a GitHub-hosted portfolio project, not a running service — there is no public URL to hit. Everything above (including the Postgres verification and the concurrent load test) was run and measured locally/in a disposable test environment, with real commands and real output, not deployed infrastructure.
+- **Single-instance rate limiting.** `slowapi`'s limiter is in-memory, per-process. Multiple instances behind a load balancer would each enforce their own separate 30/minute limit instead of one shared limit — fixing that means moving the counter to a shared store (Redis) with atomic increment-and-expire per client IP. Not built; the fix is well understood, just not implemented.
+- **Not deployed live, by choice.** This is a GitHub-hosted portfolio project, not a running service — there is no public URL to hit. Everything above (including the Postgres verification and the concurrent load test) was run and measured locally or in disposable test environments, with real commands and real output, not deployed infrastructure.
 
 ## Why this exists
 

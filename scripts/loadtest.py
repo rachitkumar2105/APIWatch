@@ -72,7 +72,8 @@ def main():
 
     print(f"target: {BASE_URL}/tasks")
     print(f"requests: {N}, concurrency: {CONCURRENCY}, errors: {errors}")
-    print(f"wall clock: {wall_elapsed_s:.3f}s ({N / wall_elapsed_s:.1f} req/s effective throughput)")
+    throughput = N / wall_elapsed_s
+    print(f"wall clock: {wall_elapsed_s:.3f}s ({throughput:.1f} req/s effective throughput)")
     print(f"p50: {pct(0.50):.2f} ms")
     print(f"p95: {pct(0.95):.2f} ms")
     print(f"p99: {pct(0.99):.2f} ms")

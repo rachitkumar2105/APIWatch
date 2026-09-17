@@ -39,3 +39,20 @@ def setup_db():
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+@pytest.fixture
+def auth_client(client):
+    """A TestClient pre-authenticated as a freshly-registered user, with the
+    Authorization header set on every request — for tests that don't care
+    about the auth flow itself, just need a logged-in caller."""
+    client.post(
+        "/auth/register", json={"username": "taskowner", "password": "correct-horse-battery"}
+    )
+    login_resp = client.post(
+        "/auth/login",
+        data={"username": "taskowner", "password": "correct-horse-battery"},
+    )
+    token = login_resp.json()["access_token"]
+    client.headers.update({"Authorization": f"Bearer {token}"})
+    return client

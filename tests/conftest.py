@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -65,9 +66,15 @@ def race_env(tmp_path):
     """File-based SQLite (a real connection pool, unlike the shared StaticPool
     connection above) so threads can genuinely interleave. Registers a user and
     exposes that user's auth headers plus a session factory for direct DB checks."""
-    file_engine = create_engine(
-        f"sqlite:///{tmp_path / 'race.db'}", connect_args={"check_same_thread": False}
-    )
+    # Set RACE_TEST_DATABASE_URL to run these concurrency tests against another database
+    # (e.g. PostgreSQL); the default is a throwaway SQLite file.
+    url = os.getenv("RACE_TEST_DATABASE_URL")
+    if url:
+        file_engine = create_engine(url)
+    else:
+        file_engine = create_engine(
+            f"sqlite:///{tmp_path / 'race.db'}", connect_args={"check_same_thread": False}
+        )
     session_factory = sessionmaker(autocommit=False, autoflush=False, bind=file_engine)
     Base.metadata.create_all(bind=file_engine)
 
@@ -92,4 +99,5 @@ def race_env(tmp_path):
     )
 
     app.dependency_overrides[get_db] = previous_override
+    Base.metadata.drop_all(bind=file_engine)
     file_engine.dispose()

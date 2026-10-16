@@ -12,8 +12,8 @@ FastAPI + SQLite (Postgres-compatible, verified) REST API for managing tasks (cr
 - **Idempotency** — `POST /tasks` accepts an optional `Idempotency-Key` header; retrying the same request (e.g. after a client-side timeout) returns the original response instead of creating a duplicate.
 - **Optimistic concurrency control** — every task carries a `version`; a `PUT` must supply the version it read, and a stale version is rejected with `409 Conflict` instead of silently overwriting a concurrent change.
 - **Health checks** — `/health/live` (process up) and `/health/ready` (database actually reachable) for real deployment readiness/liveness probes.
-- **Automated testing** — pytest, 49 tests covering happy paths, error paths, ownership isolation, idempotency, version conflicts, and health-check failure modes, run against an isolated in-memory database.
-- **CI with coverage + lint gating** — GitHub Actions runs `ruff`, `black --check`, and the full test suite with `--cov-fail-under=85` on every push (currently at 98.63%).
+- **Automated testing** — pytest, 51 tests covering happy paths, error paths, ownership isolation, idempotency, version conflicts, concurrent-request races, and health-check failure modes, run against an isolated in-memory database (the two race tests use a file-based database so threads can really interleave).
+- **CI with coverage + lint gating** — GitHub Actions runs `ruff`, `black --check`, and the full test suite with `--cov-fail-under=85` on every push (currently at 98.34%).
 - **Observability** — `prometheus-fastapi-instrumentator` exposes request count, latency histograms, and error rate at `/metrics`; a Prometheus + Grafana stack (via Docker Compose) visualizes them.
 - **Baseline security hygiene** — Pydantic validation on every request body, ORM-only DB access, an explicit CORS allow-list, a global exception handler that never leaks stack traces, and rate limiting on write and auth endpoints.
 
@@ -44,12 +44,14 @@ app/
 ├── crud.py                # DB operations, all task queries scoped by owner_id
 └── database.py              # Engine/session setup, loads .env
 tests/
-├── conftest.py               # In-memory SQLite fixture, auth_client fixture, limiter reset
+├── conftest.py               # In-memory SQLite fixture, auth_client fixture, limiter reset, race_env (file DB)
 ├── test_tasks.py               # CRUD, pagination, ownership isolation, rate limit, 500 handler
 ├── test_auth.py                  # Register/login, wrong-password vs no-such-user parity, token validation
 ├── test_idempotency.py             # Idempotency-Key dedup, per-user scoping
 ├── test_concurrency_version.py       # Optimistic-locking / 409 conflict behavior
-└── test_health.py                      # Liveness/readiness, including DB-down simulation
+├── test_health.py                      # Liveness/readiness, including DB-down simulation
+├── test_idempotency_race.py              # Two concurrent POSTs, same Idempotency-Key -> one task
+└── test_version_race.py                    # Two concurrent PUTs, same version -> one 200, one 409
 scripts/
 └── loadtest.py                           # Concurrent load test (ThreadPoolExecutor), prints p50/p95/p99
 .github/workflows/ci.yml                     # ruff + black + pytest/coverage gate on every push
@@ -113,9 +115,21 @@ Errors: `401` for missing/invalid credentials, `404` for a missing (or not-owned
 pytest --cov=app --cov-report=term-missing
 ```
 
-Last measured run: **49 passed, 98.63% coverage.** (Grew from an earlier 21-test/97.35% baseline as auth, idempotency, optimistic locking, and health checks were added — each with its own dedicated test file.) The only uncovered lines are `get_db`'s `try/finally` in `app/database.py` — tests override that dependency entirely (standard FastAPI `TestClient` pattern), so the real generator body never executes under test.
+Last measured run: **51 passed, 98.34% coverage.** (Grew from an earlier 21-test/97.35% baseline as auth, idempotency, optimistic locking, health checks, and concurrency tests were added.) Uncovered: `get_db`'s `try/finally` in `app/database.py` (tests override that dependency entirely, the standard FastAPI `TestClient` pattern), and one defensive re-raise in `crud.create_task_with_idempotency_key` for an `IntegrityError` that is not a duplicate key.
 
 Tests run against an in-memory SQLite database (via a `get_db` override in `tests/conftest.py`), reset per test, with no ordering dependency. An `auth_client` fixture pre-registers and logs in a user so most tests don't need to repeat the auth flow; `test_auth.py` tests that flow directly. The rate limiter is reset between tests so write-heavy tests don't trip the 429 threshold unintentionally.
+
+## Concurrency fixes
+
+Two check-then-act races were found in review and fixed. Each has a concurrent test that failed before the fix.
+
+**Idempotency-Key.** Two simultaneous `POST /tasks` with the same key could both look up the key, find nothing, and both create a task. Fix: a unique constraint on `idempotency_keys (owner_id, key)`, and the task and its key are now written in one transaction (`crud.create_task_with_idempotency_key`). The losing request gets an `IntegrityError`, rolls back (which also discards its task), and returns the winner's stored response. A unique constraint alone would not have been enough, because the old code committed the task before it saved the key.
+
+**Optimistic lock.** Two simultaneous `PUT`s with the same `version` could both pass a Python-side version check, and the second silently overwrote the first. Fix: the check is part of the SQL, `UPDATE ... SET version = version + 1 WHERE id=? AND owner_id=? AND version=?`, and `rowcount == 0` means the version was stale, which returns `409`. A missing or not-owned task still returns `404`.
+
+**How the tests reproduce the races.** They run on a file-based SQLite database (the shared in-memory connection used by the other tests cannot interleave), use a `threading.Barrier` so both requests start together, and wrap one lookup in a short `time.sleep` so the race window is reliably open instead of a few microseconds. Before the fixes they failed with two different task ids and with `[200, 200]` instead of `[200, 409]`. They pass 5 runs in a row on SQLite, and 3 runs in a row against a disposable PostgreSQL 16 container (`RACE_TEST_DATABASE_URL`). The rest of the suite uses in-memory SQLite and was not run on Postgres.
+
+**Upgrading an existing database:** `create_all()` does not alter existing tables, so a database created before this change needs the unique constraint added (or the table recreated).
 
 ## CI
 

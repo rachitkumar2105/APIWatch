@@ -102,8 +102,8 @@ Errors: `401` for missing/invalid credentials, `404` for a missing (or not-owned
 ## Design notes
 
 - **Indexes**: `status` and `created_at` are indexed on `tasks`; `owner_id` is indexed on both `tasks` and `idempotency_keys` since every query filters on it.
-- **Optimistic locking, not pessimistic**: a `version` column plus a check-on-write, rather than row-level locks, since write contention on a single task is expected to be rare — this trades a small chance of a client needing to retry for zero locking overhead on the common case.
-- **Idempotency keys stored in the database, not in-memory**: survives a process restart, and scopes naturally per-user via the existing `owner_id` foreign key — no separate cache/store needed at this scale.
+- **Optimistic locking, not pessimistic**: a `version` column checked atomically inside the `UPDATE ... WHERE version = ?` statement itself, rather than row-level locks, since write contention on a single task is expected to be rare — this trades a small chance of a client needing to retry for zero locking overhead on the common case.
+- **Idempotency keys stored in the database, not in-memory**: survives a process restart, and scopes naturally per-user via the existing `owner_id` foreign key, and a unique constraint on `(owner_id, key)` makes the database the arbiter when two requests race with the same key — no separate cache/store needed at this scale.
 - **Sync, not async**: routes are synchronous. SQLAlchemy's sync engine is the simplest correct setup for this workload; async would matter for many slow concurrent I/O-bound calls to *other* services, which this API doesn't make.
 - **Passwords**: bcrypt via `passlib`, never a fast general-purpose hash — bcrypt's deliberate slowness and automatic per-password salt are exactly why it's the right tool here, not SHA-256.
 - **JWT secret**: read from `JWT_SECRET_KEY`; a startup warning fires if it's left at the insecure local-dev default, so the gap can't silently ship unnoticed.

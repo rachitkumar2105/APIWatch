@@ -1,6 +1,7 @@
 import json
 from typing import Optional
 
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -71,23 +72,34 @@ def count_tasks(db: Session, owner_id: int, status: Optional[TaskStatus] = None)
 
 def update_task(db: Session, task_id: int, task: TaskUpdate, owner_id: int) -> Optional[Task]:
     """Returns None if not found (or not owned by this user).
-    Raises VersionConflict if task.version doesn't match the row's current version.
+    Raises VersionConflict if the row's version no longer matches task.version.
+
+    The version check lives in the UPDATE's WHERE clause, so check-and-write is a
+    single atomic statement: if another request bumped the version first, this
+    UPDATE matches zero rows (rowcount == 0) instead of overwriting their change.
     """
-    db_task = get_task(db, task_id, owner_id)
-    if db_task is None:
+    existing = get_task(db, task_id, owner_id)
+    if existing is None:
         return None
-    if db_task.version != task.version:
-        raise VersionConflict(
-            f"Task {task_id} is at version {db_task.version}, but update was based on "
-            f"version {task.version}. Re-fetch the task and retry."
+    result = db.execute(
+        update(Task)
+        .where(Task.id == task_id, Task.owner_id == owner_id, Task.version == task.version)
+        .values(
+            title=task.title,
+            description=task.description,
+            status=task.status,
+            version=Task.version + 1,
         )
-    db_task.title = task.title
-    db_task.description = task.description
-    db_task.status = task.status
-    db_task.version += 1
+    )
+    if result.rowcount == 0:
+        db.rollback()
+        raise VersionConflict(
+            f"Task {task_id} was modified by another request; this update was based on "
+            f"stale version {task.version}. Re-fetch the task and retry."
+        )
     db.commit()
-    db.refresh(db_task)
-    return db_task
+    db.refresh(existing)
+    return existing
 
 
 def delete_task(db: Session, task_id: int, owner_id: int) -> bool:

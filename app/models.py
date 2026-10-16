@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -57,6 +57,9 @@ class IdempotencyKey(Base):
     """
 
     __tablename__ = "idempotency_keys"
+    # The database, not application code, decides the winner when two requests
+    # race with the same key: the second insert violates this constraint.
+    __table_args__ = (UniqueConstraint("owner_id", "key", name="uq_idempotency_owner_key"),)
 
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String, nullable=False, index=True)

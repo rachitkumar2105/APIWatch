@@ -144,18 +144,14 @@ def create_task(
 ):
     if idempotency_key:
         cached = crud.get_idempotent_response(db, idempotency_key, current_user.id)
-        if cached is not None:
-            body, status_code = cached
-            return JSONResponse(status_code=status_code, content=body)
+        if cached is None:
+            cached = crud.create_task_with_idempotency_key(
+                db, task, current_user.id, idempotency_key
+            )
+        body, status_code = cached
+        return JSONResponse(status_code=status_code, content=body)
 
-    db_task = crud.create_task(db, task, current_user.id)
-    result = TaskRead.model_validate(db_task)
-
-    if idempotency_key:
-        crud.save_idempotent_response(
-            db, idempotency_key, current_user.id, result.model_dump(mode="json"), 201
-        )
-    return db_task
+    return crud.create_task(db, task, current_user.id)
 
 
 @app.get("/tasks", response_model=TaskList)

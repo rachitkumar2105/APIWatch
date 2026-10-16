@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -56,3 +58,38 @@ def auth_client(client):
     token = login_resp.json()["access_token"]
     client.headers.update({"Authorization": f"Bearer {token}"})
     return client
+
+
+@pytest.fixture
+def race_env(tmp_path):
+    """File-based SQLite (a real connection pool, unlike the shared StaticPool
+    connection above) so threads can genuinely interleave. Registers a user and
+    exposes that user's auth headers plus a session factory for direct DB checks."""
+    file_engine = create_engine(
+        f"sqlite:///{tmp_path / 'race.db'}", connect_args={"check_same_thread": False}
+    )
+    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=file_engine)
+    Base.metadata.create_all(bind=file_engine)
+
+    def file_get_db():
+        db = session_factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    previous_override = app.dependency_overrides[get_db]
+    app.dependency_overrides[get_db] = file_get_db
+    limiter.reset()
+
+    setup_client = TestClient(app)
+    creds = {"username": "raceuser", "password": "race-password-123"}
+    setup_client.post("/auth/register", json=creds)
+    token = setup_client.post("/auth/login", data=creds).json()["access_token"]
+
+    yield SimpleNamespace(
+        session_factory=session_factory, headers={"Authorization": f"Bearer {token}"}
+    )
+
+    app.dependency_overrides[get_db] = previous_override
+    file_engine.dispose()

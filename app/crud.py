@@ -1,10 +1,11 @@
 import json
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import IdempotencyKey, Task, TaskStatus, User
-from app.schemas import TaskCreate, TaskUpdate, UserCreate
+from app.schemas import TaskCreate, TaskRead, TaskUpdate, UserCreate
 
 
 class VersionConflict(Exception):
@@ -112,14 +113,40 @@ def get_idempotent_response(db: Session, key: str, owner_id: int) -> Optional[tu
     return json.loads(record.response_body), record.status_code
 
 
-def save_idempotent_response(
-    db: Session, key: str, owner_id: int, response_body: dict, status_code: int
-) -> None:
-    record = IdempotencyKey(
-        key=key,
+def create_task_with_idempotency_key(
+    db: Session, task: TaskCreate, owner_id: int, key: str
+) -> tuple[dict, int]:
+    """Create the task and record its idempotency key in ONE transaction.
+
+    If another request with the same (owner_id, key) committed first, the unique
+    constraint rejects this insert; we roll back (which also discards this
+    request's task) and return the winner's stored response instead.
+    """
+    db_task = Task(
+        title=task.title,
+        description=task.description,
+        status=task.status,
         owner_id=owner_id,
-        response_body=json.dumps(response_body, default=str),
-        status_code=status_code,
+        version=1,
     )
-    db.add(record)
-    db.commit()
+    db.add(db_task)
+    try:
+        db.flush()
+        db.refresh(db_task)
+        body = TaskRead.model_validate(db_task).model_dump(mode="json")
+        db.add(
+            IdempotencyKey(
+                key=key,
+                owner_id=owner_id,
+                response_body=json.dumps(body, default=str),
+                status_code=201,
+            )
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        stored = get_idempotent_response(db, key, owner_id)
+        if stored is None:
+            raise
+        return stored
+    return body, 201

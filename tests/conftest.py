@@ -1,6 +1,12 @@
 import os
 from types import SimpleNamespace
 
+# Point the app's own engine at a throwaway in-memory database before app.main is
+# imported (it runs create_all at import), so the test run never creates or
+# touches ./apiwatch.db. Every test then swaps in TestingSessionLocal below.
+os.environ["DATABASE_URL"] = "sqlite://"
+os.environ.setdefault("APP_ENV", "development")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

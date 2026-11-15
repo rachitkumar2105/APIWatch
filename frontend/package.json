@@ -1,0 +1,15 @@
+{
+  "name": "apiwatch-frontend",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Static frontend for the APIWatch task API. No runtime dependencies.",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "check": "node --check assets/app.js && node --check scripts/build.mjs && node --check scripts/serve.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

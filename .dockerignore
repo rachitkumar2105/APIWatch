@@ -1,0 +1,25 @@
+# Only app/ and requirements.txt go into the image.
+.git
+.github
+.claude
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.coverage*
+htmlcov
+*.db
+*.db-journal
+.env
+tests
+frontend
+grafana
+deploy
+scripts
+dist
+docker-compose.yml
+prometheus.yml
+README.md
+DEPLOYMENT.md

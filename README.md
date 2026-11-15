@@ -4,6 +4,15 @@ A task-management REST API built to demonstrate: scalable API design, real authe
 
 Deliberately kept deterministic and simple — no AI/LLM components — so every design decision is fully explainable under interview cross-questioning.
 
+## Live demo
+
+- **App:** https://apiwatch.vercel.app (frontend on Vercel)
+- **API:** https://rachitkumar2105-apiwatch-api.hf.space (FastAPI on Hugging Face Spaces, interactive docs at `/docs`)
+
+The app is a task board whose every click is a real API call, shown live in a request log beside it: the status code, the time it took, and what the server decided. "Start a guest session" gives you a private throwaway account. Two buttons replay the interesting cases on demand: the same create sent twice with one `Idempotency-Key` (one task, not two), and a save based on a stale version (`409`, nothing overwritten).
+
+The backend runs on free hosting, so the first request after a quiet period can take up to a minute while the Space wakes up; the app shows "Waking the API" until it answers. Demo data can be reset at any time (see [Deployment](#deployment)).
+
 ## What it does
 
 FastAPI + SQLite (Postgres-compatible, verified) REST API for managing tasks (create, read, update, delete, list with pagination and status filtering), backed by:
@@ -15,7 +24,8 @@ FastAPI + SQLite (Postgres-compatible, verified) REST API for managing tasks (cr
 - **Automated testing** — pytest, 51 tests covering happy paths, error paths, ownership isolation, idempotency, version conflicts, concurrent-request races, and health-check failure modes, run against an isolated in-memory database (the two race tests use a file-based database so threads can really interleave).
 - **CI with coverage + lint gating** — GitHub Actions runs `ruff`, `black --check`, and the full test suite with `--cov-fail-under=85` on every push (currently at 98.34%).
 - **Observability** — `prometheus-fastapi-instrumentator` exposes request count, latency histograms, and error rate at `/metrics`; a Prometheus + Grafana stack (via Docker Compose) visualizes them.
-- **Baseline security hygiene** — Pydantic validation on every request body, ORM-only DB access, an explicit CORS allow-list, a global exception handler that never leaks stack traces, and rate limiting on write and auth endpoints.
+- **Baseline security hygiene** — Pydantic validation on every request body (length limits, trimmed titles, a strict username character set, bcrypt's 72-byte password limit enforced instead of silently truncated), ORM-only DB access, an explicit CORS allow-list, security headers on every response, a global exception handler that never leaks stack traces, rate limiting on write and auth endpoints keyed on the real client IP behind a proxy, a production mode that refuses to start without a strong JWT secret, and `pip-audit` in CI.
+- **Frontend** — a dependency-free static app (HTML, CSS, one JS module) with guest/sign-in/register flows, a three-column board (drag and drop or move buttons), inline editing with conflict recovery, and the live request log. Strict Content-Security-Policy, no third-party scripts, fonts or cookies.
 
 ## Architecture
 
@@ -37,8 +47,9 @@ FastAPI + SQLite (Postgres-compatible, verified) REST API for managing tasks (cr
 
 ```
 app/
-├── main.py          # Routes, auth wiring, CORS, rate limiting, exception handling, health checks
-├── auth.py           # Password hashing (bcrypt) + JWT issuance/verification
+├── main.py          # Routes, auth wiring, CORS, security headers, rate limiting, health checks, /metrics
+├── config.py         # Environment-driven settings (APP_ENV, CORS, metrics token, proxy trust)
+├── auth.py           # Password hashing (bcrypt) + JWT issuance/verification (PyJWT)
 ├── models.py          # SQLAlchemy models: User, Task (versioned, owned), IdempotencyKey
 ├── schemas.py           # Pydantic request/response schemas
 ├── crud.py                # DB operations, all task queries scoped by owner_id
@@ -51,14 +62,24 @@ tests/
 ├── test_concurrency_version.py       # Optimistic-locking / 409 conflict behavior
 ├── test_health.py                      # Liveness/readiness, including DB-down simulation
 ├── test_idempotency_race.py              # Two concurrent POSTs, same Idempotency-Key -> one task
-└── test_version_race.py                    # Two concurrent PUTs, same version -> one 200, one 409
+├── test_version_race.py                    # Two concurrent PUTs, same version -> one 200, one 409
+└── test_deployment.py                       # Security headers, CORS, metrics token, proxy IPs, secret policy, input limits
+frontend/
+├── index.html, privacy.html, terms.html, 404.html
+├── assets/app.js, assets/styles.css, assets/fonts/   # No framework, no runtime dependencies
+├── scripts/build.mjs                       # Builds dist/ for Vercel, injecting APIWATCH_API_URL + CSP
+├── scripts/serve.mjs                        # Local dev server (npm run dev, port 4173)
+└── vercel.json                             # Build settings + security headers
 scripts/
-└── loadtest.py                           # Concurrent load test (ThreadPoolExecutor), prints p50/p95/p99
-.github/workflows/ci.yml                     # ruff + black + pytest/coverage gate on every push
+├── loadtest.py                           # Concurrent load test (ThreadPoolExecutor), prints p50/p95/p99
+└── deploy_hf_space.py                      # Uploads the API to a Hugging Face Space and sets its secrets
+deploy/huggingface/README.md                # Space card (sdk: docker, app_port: 7860)
+.github/workflows/ci.yml                     # API lint/tests/audit, Docker boot check, frontend build
+.github/workflows/deploy-backend.yml          # Optional auto-deploy of the API to Hugging Face
 docker-compose.yml                             # api + Prometheus + Grafana
 prometheus.yml                                   # Scrape config
 grafana/provisioning/                              # Auto-provisioned datasource + dashboard
-.env.example                                         # DATABASE_URL / JWT_SECRET_KEY / CORS_ORIGINS placeholders
+.env.example                                         # Every environment variable, documented
 ```
 
 ## Running locally
@@ -66,7 +87,7 @@ grafana/provisioning/                              # Auto-provisioned datasource
 ```bash
 python -m venv .venv
 .venv/Scripts/activate   # source .venv/bin/activate on macOS/Linux
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # runtime deps + pytest/ruff/black/pip-audit
 cp .env.example .env     # set JWT_SECRET_KEY for anything beyond local dev
 uvicorn app.main:app --reload
 ```
@@ -75,12 +96,22 @@ uvicorn app.main:app --reload
 - Interactive docs: http://localhost:8000/docs
 - Metrics: http://localhost:8000/metrics
 
+Frontend (Node 18+, no `npm install` needed: there are no dependencies):
+
+```bash
+cd frontend
+npm run dev     # http://localhost:4173, talks to the API on :8000
+```
+
+`requirements.txt` holds only what the production image needs; test and lint tools are in `requirements-dev.txt`.
+
 ## API
 
 | Method | Path                              | Auth required | Description                                     |
 |--------|-------------------------------------|:---:|--------------------------------------------------|
 | POST   | `/auth/register`                   | – | Create an account (username + password)           |
-| POST   | `/auth/login`                      | – | Exchange credentials for a JWT access token        |
+| POST   | `/auth/login`                      | – | Exchange credentials for a JWT access token (`expires_in` in seconds) |
+| GET    | `/auth/me`                         | ✅ | The account behind the token (lets a client check a stored token) |
 | GET    | `/health/live`                     | – | Liveness probe — process is up                     |
 | GET    | `/health/ready`                    | – | Readiness probe — database is reachable            |
 | POST   | `/tasks`                           | ✅ | Create a task (rate-limited 30/min/IP; supports `Idempotency-Key` header) |
@@ -88,6 +119,8 @@ uvicorn app.main:app --reload
 | GET    | `/tasks/{id}`                      | ✅ | Get a single task (only if owned by the caller)    |
 | PUT    | `/tasks/{id}`                      | ✅ | Update a task (rate-limited; requires current `version`, `409` on conflict) |
 | DELETE | `/tasks/{id}`                      | ✅ | Delete a task (rate-limited)                       |
+| GET    | `/metrics`                         | token | Prometheus metrics. Open in development; in production only with `METRICS_TOKEN` |
+| GET    | `/`                                | – | Redirects to `/docs`                               |
 
 Task fields: `id`, `title`, `description`, `status` (`pending` / `in_progress` / `done`), `created_at`, `updated_at`, `version`.
 
@@ -105,9 +138,11 @@ Errors: `401` for missing/invalid credentials, `404` for a missing (or not-owned
 - **Optimistic locking, not pessimistic**: a `version` column checked atomically inside the `UPDATE ... WHERE version = ?` statement itself, rather than row-level locks, since write contention on a single task is expected to be rare — this trades a small chance of a client needing to retry for zero locking overhead on the common case.
 - **Idempotency keys stored in the database, not in-memory**: survives a process restart, and scopes naturally per-user via the existing `owner_id` foreign key, and a unique constraint on `(owner_id, key)` makes the database the arbiter when two requests race with the same key — no separate cache/store needed at this scale.
 - **Sync, not async**: routes are synchronous. SQLAlchemy's sync engine is the simplest correct setup for this workload; async would matter for many slow concurrent I/O-bound calls to *other* services, which this API doesn't make.
-- **Passwords**: bcrypt via `passlib`, never a fast general-purpose hash — bcrypt's deliberate slowness and automatic per-password salt are exactly why it's the right tool here, not SHA-256.
-- **JWT secret**: read from `JWT_SECRET_KEY`; a startup warning fires if it's left at the insecure local-dev default, so the gap can't silently ship unnoticed.
-- **CORS**: origins come from `CORS_ORIGINS` (comma-separated), default `http://localhost:3000`. Never a wildcard.
+- **Passwords**: bcrypt (called directly; `passlib` is unmaintained and breaks on bcrypt 5), never a fast general-purpose hash — bcrypt's deliberate slowness and automatic per-password salt are exactly why it's the right tool here, not SHA-256. bcrypt only reads 72 bytes, so longer passwords are rejected with a clear error rather than silently truncated.
+- **JWT**: signed with PyJWT (replacing `python-jose`, which had open CVEs), algorithm list pinned on decode. The secret comes from `JWT_SECRET_KEY`: in development a default only logs a warning; with `APP_ENV=production` (the Docker image default) the process refuses to start without a secret of at least 32 characters.
+- **CORS**: origins come from `CORS_ORIGINS` (comma-separated), plus an optional `CORS_ORIGIN_REGEX` for preview deployments. Never a wildcard. Credentials mode is off because tokens travel in the `Authorization` header, not cookies.
+- **Rate limits behind a proxy**: on Hugging Face every request arrives from the platform's proxy, so keying on the TCP peer would put all visitors in one bucket. With `TRUST_PROXY_HEADERS=true` the limiter walks `X-Forwarded-For` from the right and uses the first public address: the one the edge proxy appended. A client can prepend fake entries, but can't get past that one.
+- **Security headers**: `nosniff`, `no-referrer`, HSTS, a `default-src 'none'` CSP on API responses (the docs pages keep their CDN assets), and `frame-ancestors` limited to Hugging Face, which embeds the Space page.
 
 ## Tests and coverage
 
@@ -115,7 +150,7 @@ Errors: `401` for missing/invalid credentials, `404` for a missing (or not-owned
 pytest --cov=app --cov-report=term-missing
 ```
 
-Last measured run: **51 passed, 98.34% coverage.** (Grew from an earlier 21-test/97.35% baseline as auth, idempotency, optimistic locking, health checks, and concurrency tests were added.) Uncovered: `get_db`'s `try/finally` in `app/database.py` (tests override that dependency entirely, the standard FastAPI `TestClient` pattern), and one defensive re-raise in `crud.create_task_with_idempotency_key` for an `IntegrityError` that is not a duplicate key.
+Last measured run: **82 passed, 98% coverage** (410 statements, 7 missed). It grew from an earlier 21-test/97.35% baseline, then 51 tests/98.34%, as auth, idempotency, optimistic locking, health checks, concurrency, and deployment-hardening tests were added. Uncovered: `get_db`'s `try/finally` in `app/database.py` (tests override that dependency entirely, the standard FastAPI `TestClient` pattern), and one defensive re-raise in `crud.create_task_with_idempotency_key` for an `IntegrityError` that is not a duplicate key.
 
 Tests run against an in-memory SQLite database (via a `get_db` override in `tests/conftest.py`), reset per test, with no ordering dependency. An `auth_client` fixture pre-registers and logs in a user so most tests don't need to repeat the auth flow; `test_auth.py` tests that flow directly. The rate limiter is reset between tests so write-heavy tests don't trip the 429 threshold unintentionally.
 
@@ -133,14 +168,13 @@ Two check-then-act races were found in review and fixed. Each has a concurrent t
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push and on PRs to `main`:
+`.github/workflows/ci.yml` runs on every push and on PRs to `main`, as three jobs:
 
-1. Install dependencies
-2. `ruff check .`
-3. `black --check .`
-4. `pytest --cov=app --cov-fail-under=85`
+1. **API**: `ruff check .`, `black --check .`, `pytest --cov=app --cov-fail-under=85`, then `pip-audit -r requirements.txt` (fails on any known vulnerability in a runtime dependency).
+2. **Production image boots**: builds the Dockerfile, runs it the way Hugging Face does (port 7860, production mode, a generated secret) and waits for `/health/ready`.
+3. **Frontend build**: syntax-checks the JS and runs the Vercel build with a sample API URL.
 
-Any step failing blocks the job. Verified live on GitHub, not just locally.
+Any step failing blocks the job.
 
 ## Observability stack (Prometheus + Grafana)
 
@@ -191,7 +225,12 @@ Verified with no application code changes beyond the environment variable and th
 Written down explicitly rather than glossed over:
 
 - **Single-instance rate limiting.** `slowapi`'s limiter is in-memory, per-process. Multiple instances behind a load balancer would each enforce their own separate 30/minute limit instead of one shared limit — fixing that means moving the counter to a shared store (Redis) with atomic increment-and-expire per client IP. Not built; the fix is well understood, just not implemented.
-- **Not deployed live, by choice.** This is a GitHub-hosted portfolio project, not a running service — there is no public URL to hit. Everything above (including the Postgres verification and the concurrent load test) was run and measured locally or in disposable test environments, with real commands and real output, not deployed infrastructure.
+- **Demo hosting is free-tier.** Without a `DATABASE_URL`, the live API keeps its data in SQLite inside the Space, which is wiped when the Space restarts or rebuilds; point `DATABASE_URL` at a managed Postgres (e.g. Neon) for persistence. The Space also sleeps after a period without traffic and takes up to a minute to wake. The latency figures above were measured locally, not against the hosted demo.
+- **No schema migrations.** Tables are created with `create_all()`. Fine for this schema on a fresh database; a real service would use Alembic.
+
+## Deployment
+
+Backend on Hugging Face Spaces (Docker), frontend on Vercel. Full step-by-step guide, including the environment variables for each side: [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Why this exists
 

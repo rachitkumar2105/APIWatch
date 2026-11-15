@@ -2,10 +2,15 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 *.db
+*.db-journal
 .venv/
 venv/
 .env
 .claude/
 .ruff_cache/
+node_modules/
+frontend/dist/
+.vercel/

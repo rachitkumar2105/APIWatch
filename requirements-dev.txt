@@ -1,0 +1,7 @@
+-r requirements.txt
+pytest==9.2.0
+pytest-cov==7.1.0
+httpx==0.28.1
+ruff==0.6.9
+black==24.10.0
+pip-audit==2.10.1

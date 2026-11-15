@@ -3,108 +3,243 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>APIWatch</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000; base-uri 'none'; form-action 'none'; object-src 'none'" />
+  <title>APIWatch: a task API you can watch working</title>
+  <meta name="description" content="A task board on a FastAPI backend. Every request it makes is shown live: auth, idempotent retries, rejected stale edits and rate limits." />
+  <meta name="theme-color" content="#13212c" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preload" href="/assets/fonts/instrument-sans-var.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/assets/styles.css?v=dev" />
 </head>
 <body>
-  <div class="wrap">
-    <header class="hero">
-      <p class="kicker">Task Management REST API</p>
-      <h1>APIWatch</h1>
-      <p class="lede">
-        A task-management REST API built with automated testing, CI/CD, and
-        production-style observability.
-      </p>
-    </header>
+  <a class="skip" href="#main">Skip to content</a>
 
-    <section id="architecture">
-      <h2>Architecture</h2>
-      <div class="diagram">                 ┌─────────────┐
-  Client ──────► │   FastAPI   │ ──────► SQLAlchemy ──────► SQLite
-                 │ (app/main)  │
-                 └──────┬──────┘
-                        │ /metrics
-                        ▼
-                 ┌─────────────┐        ┌─────────┐
-                 │ Prometheus  │ ─────► │ Grafana │
-                 │ (scrapes    │        │(dashboard)
-                 │  every 5s)  │        └─────────┘
-                 └─────────────┘</div>
-    </section>
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2.5"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4 12a7 7 0 0 1 12-4.9L18.5 9.5"/><path d="M18.5 4.5v5h-5"/><path d="M20 12a7 7 0 0 1-12 4.9L5.5 14.5"/><path d="M5.5 19.5v-5h5"/></symbol>
+    <symbol id="i-versions" viewBox="0 0 24 24"><path d="M4 8.5 12 4.5l8 4-8 4-8-4Z"/><path d="m4 12.5 8 4 8-4"/><path d="m4 16.5 8 4 8-4"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.2 17.5a8.5 8.5 0 1 1 15.6 0"/><path d="m12 13 4-4.5"/><circle cx="12" cy="13" r="1.4"/></symbol>
+    <symbol id="i-docs" viewBox="0 0 24 24"><path d="M5 4.5h9.5L19 9v10.5H5Z"/><path d="M14.5 4.5V9H19"/><path d="M8.5 13h7M8.5 16.5h5"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8.5 7.5-5 4.5 5 4.5"/><path d="m15.5 7.5 5 4.5-5 4.5"/><path d="m13.5 5-3 14"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5.5"/><path d="m11 6-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="M5 12h13.5"/><path d="m13 6 6 6-6 6"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4.5 19.5h4l10-10a2.8 2.8 0 0 0-4-4l-10 10Z"/><path d="m13 7 4 4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 12.5h9l1-12.5"/><path d="M10.5 11v5M13.5 11v5"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></symbol>
+    <symbol id="i-clear" viewBox="0 0 24 24"><path d="M5 7.5h14"/><path d="M5 12h9"/><path d="M5 16.5h5"/><path d="m15 15 5 5M20 15l-5 5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+  </svg>
 
-    <section id="stack">
-      <h2>Tech Stack</h2>
-      <ul class="stack-list">
-        <li>FastAPI<span class="role">API framework</span></li>
-        <li>SQLAlchemy<span class="role">ORM (SQLite)</span></li>
-        <li>Pydantic<span class="role">Validation / schemas</span></li>
-        <li>pytest<span class="role">Automated testing</span></li>
-        <li>GitHub Actions<span class="role">CI, coverage + lint gate</span></li>
-        <li>ruff / black<span class="role">Lint / format</span></li>
-        <li>slowapi<span class="role">Rate limiting</span></li>
-        <li>Prometheus<span class="role">Metrics scraping</span></li>
-        <li>Grafana<span class="role">Dashboards</span></li>
-        <li>Docker Compose<span class="role">Local observability stack</span></li>
-      </ul>
-    </section>
+  <header class="bar">
+    <a class="brand" href="/" aria-label="APIWatch home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#13212c"/><circle cx="16" cy="16" r="9.5" fill="none" stroke="#d4dee6" stroke-width="2"/><path d="M16 16V10.5M16 16h4.5" fill="none" stroke="#d4dee6" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="6.5" r="1.6" fill="#79d0a6"/></svg>
+      <span>APIWatch</span>
+    </a>
 
-    <section id="docs">
-      <h2>API Docs</h2>
-      <div class="card">
-        <p style="margin-top:0">
-          Not deployed anywhere reachable right now — run it locally and the
-          interactive Swagger UI comes up at <code>/docs</code>.
+    <div class="bar-status" id="api-status" data-state="checking" role="status">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="status-text">Checking the API</span>
+      <button class="link-button" id="status-retry" type="button" hidden>Retry</button>
+    </div>
+
+    <nav class="bar-nav" aria-label="Project">
+      <a class="nav-link" id="docs-link" href="#" target="_blank" rel="noopener noreferrer">
+        <svg class="icon" aria-hidden="true"><use href="#i-docs" /></svg><span>API docs</span>
+      </a>
+      <a class="nav-link" href="https://github.com/rachitkumar2105/APIWatch" target="_blank" rel="noopener noreferrer">
+        <svg class="icon" aria-hidden="true"><use href="#i-code" /></svg><span>Source</span>
+      </a>
+      <div class="account" id="account" hidden>
+        <span class="account-name" id="account-name"></span>
+        <button class="button quiet" id="sign-out" type="button">Sign out</button>
+      </div>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <main class="stage" id="main" tabindex="-1">
+      <!-- Signed out -->
+      <section class="intro" id="view-intro" aria-labelledby="intro-title">
+        <h1 id="intro-title">A task API you can watch working.</h1>
+        <p class="lede">
+          Every click here sends a real request to a FastAPI backend. The request log shows each one as it
+          happens: the status code, how long it took, and what the server decided.
         </p>
-        <div class="actions">
-          <a class="btn primary" href="https://github.com/rachitkumar2105/APIWatch#running-locally">
-            Run locally — see README
-          </a>
-          <a class="btn" href="https://github.com/rachitkumar2105/APIWatch">
-            View source on GitHub
-          </a>
+
+        <ul class="guarantees">
+          <li>
+            <svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg>
+            <p><strong>Private accounts.</strong> Passwords are stored as bcrypt hashes, and every task request needs a signed token that expires.</p>
+          </li>
+          <li>
+            <svg class="icon" aria-hidden="true"><use href="#i-repeat" /></svg>
+            <p><strong>Retries can't duplicate.</strong> Each new task carries an Idempotency-Key, so sending it twice returns the first result.</p>
+          </li>
+          <li>
+            <svg class="icon" aria-hidden="true"><use href="#i-versions" /></svg>
+            <p><strong>Edits can't overwrite each other.</strong> A save based on an old version gets a 409 instead of silently winning.</p>
+          </li>
+          <li>
+            <svg class="icon" aria-hidden="true"><use href="#i-gauge" /></svg>
+            <p><strong>Limits on writes.</strong> 30 task changes and 10 sign-ins per minute for each client, enforced by the API.</p>
+          </li>
+        </ul>
+
+        <div class="auth">
+          <div class="segmented" role="tablist" aria-label="How to sign in">
+            <button type="button" role="tab" id="tab-guest" aria-controls="panel-guest" aria-selected="true">Guest</button>
+            <button type="button" role="tab" id="tab-login" aria-controls="panel-login" aria-selected="false" tabindex="-1">Sign in</button>
+            <button type="button" role="tab" id="tab-register" aria-controls="panel-register" aria-selected="false" tabindex="-1">Create account</button>
+          </div>
+
+          <div class="auth-panel" id="panel-guest" role="tabpanel" aria-labelledby="tab-guest">
+            <p>Get a private board straight away. A random account is created for you and forgotten when you close this tab.</p>
+            <button class="button primary" id="start-guest" type="button">Start a guest session</button>
+          </div>
+
+          <form class="auth-panel" id="panel-login" role="tabpanel" aria-labelledby="tab-login" novalidate hidden>
+            <div class="field">
+              <label for="login-username">Username</label>
+              <input id="login-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+              <p class="field-error" id="login-username-error" hidden></p>
+            </div>
+            <div class="field">
+              <label for="login-password">Password</label>
+              <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+              <p class="field-error" id="login-password-error" hidden></p>
+            </div>
+            <p class="form-error" role="alert" hidden></p>
+            <button class="button primary" type="submit">Sign in</button>
+          </form>
+
+          <form class="auth-panel" id="panel-register" role="tabpanel" aria-labelledby="tab-register" novalidate hidden>
+            <div class="field">
+              <label for="register-username">Username</label>
+              <input id="register-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="50" aria-describedby="register-username-hint" required />
+              <p class="field-hint" id="register-username-hint">3 to 50 letters, numbers, dots, dashes or underscores.</p>
+              <p class="field-error" id="register-username-error" hidden></p>
+            </div>
+            <div class="field">
+              <label for="register-password">Password</label>
+              <input id="register-password" name="password" type="password" autocomplete="new-password" aria-describedby="register-password-hint" required />
+              <p class="field-hint" id="register-password-hint">At least 8 characters. Don't reuse a password from anywhere else.</p>
+              <p class="field-error" id="register-password-error" hidden></p>
+            </div>
+            <p class="form-error" role="alert" hidden></p>
+            <button class="button primary" type="submit">Create account</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Signed in -->
+      <section class="workspace" id="view-workspace" aria-labelledby="workspace-title" hidden>
+        <div class="workspace-head">
+          <h1 id="workspace-title" tabindex="-1">Your tasks</h1>
+          <p class="workspace-count" id="task-count" aria-live="polite">No tasks yet</p>
+        </div>
+
+        <form class="composer" id="composer" novalidate>
+          <div class="field">
+            <label for="new-title">Task</label>
+            <input id="new-title" name="title" maxlength="200" autocomplete="off" placeholder="e.g. Review the rate limiter" required />
+            <p class="field-error" id="new-title-error" hidden></p>
+          </div>
+          <div class="field">
+            <label for="new-description">Details <span class="optional">(optional)</span></label>
+            <input id="new-description" name="description" maxlength="2000" autocomplete="off" />
+          </div>
+          <button class="button primary composer-submit" type="submit">Add task</button>
+        </form>
+
+        <div class="board" id="board">
+          <section class="column" data-status="pending" aria-labelledby="col-pending">
+            <div class="column-head">
+              <h2 id="col-pending">Pending</h2>
+              <span class="column-total"><span data-total>0</span> <span class="visually-hidden">tasks</span></span>
+            </div>
+            <ul class="cards" data-list aria-labelledby="col-pending"></ul>
+            <button class="button quiet more" type="button" data-more hidden>Load more</button>
+          </section>
+          <section class="column" data-status="in_progress" aria-labelledby="col-progress">
+            <div class="column-head">
+              <h2 id="col-progress">In progress</h2>
+              <span class="column-total"><span data-total>0</span> <span class="visually-hidden">tasks</span></span>
+            </div>
+            <ul class="cards" data-list aria-labelledby="col-progress"></ul>
+            <button class="button quiet more" type="button" data-more hidden>Load more</button>
+          </section>
+          <section class="column" data-status="done" aria-labelledby="col-done">
+            <div class="column-head">
+              <h2 id="col-done">Done</h2>
+              <span class="column-total"><span data-total>0</span> <span class="visually-hidden">tasks</span></span>
+            </div>
+            <ul class="cards" data-list aria-labelledby="col-done"></ul>
+            <button class="button quiet more" type="button" data-more hidden>Load more</button>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <aside class="tape" id="tape" aria-labelledby="tape-title">
+      <button class="tape-toggle" id="tape-toggle" type="button" aria-expanded="false" aria-controls="tape-body">
+        <span>Request log</span>
+        <span class="tape-toggle-end">
+          <span class="tape-badge" id="tape-badge">0</span>
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron" /></svg>
+        </span>
+      </button>
+      <div class="tape-body" id="tape-body">
+        <div class="tape-head">
+          <h2 id="tape-title">Request log</h2>
+          <button class="icon-button on-dark" id="tape-clear" type="button" aria-label="Clear the log" title="Clear the log">
+            <svg class="icon" aria-hidden="true"><use href="#i-clear" /></svg>
+          </button>
+        </div>
+        <p class="tape-empty" id="tape-empty">
+          Requests appear here as this page makes them: method, path, status code, time, and what the server did.
+        </p>
+        <ol class="tape-rows" id="tape-rows"></ol>
+        <div class="tape-lab" id="tape-lab" hidden>
+          <h3>Try the guarantees</h3>
+          <p>Each button sends real requests. Watch the codes above.</p>
+          <div class="lab-actions">
+            <button class="button on-dark" id="lab-replay" type="button">Send a create twice</button>
+            <button class="button on-dark" id="lab-conflict" type="button">Save a stale edit</button>
+          </div>
         </div>
       </div>
-    </section>
-
-    <section id="quality">
-      <h2>Test Coverage &amp; CI</h2>
-      <div class="card">
-        <div class="metric-row">
-          <div class="metric">
-            <div class="value">97.35%</div>
-            <div class="label">Coverage</div>
-          </div>
-          <div class="metric">
-            <div class="value">21</div>
-            <div class="label">Tests passing</div>
-          </div>
-          <div class="metric">
-            <div class="value">85%</div>
-            <div class="label">CI floor</div>
-          </div>
-        </div>
-        <div class="badge-row">
-          <a href="https://github.com/rachitkumar2105/APIWatch/actions/workflows/ci.yml">
-            <img
-              src="https://github.com/rachitkumar2105/APIWatch/actions/workflows/ci.yml/badge.svg"
-              alt="CI status"
-              width="90"
-              height="20"
-            />
-          </a>
-        </div>
-        <p class="note">
-          Coverage and test count are from the last local run
-          (<code>pytest --cov=app --cov-report=term-missing</code>); the badge
-          above reflects the live GitHub Actions status once this repo is pushed.
-        </p>
-      </div>
-    </section>
-
-    <footer>
-      <span>Rachit Kumar Singh</span>
-      <a href="https://github.com/rachitkumar2105/APIWatch">github.com/rachitkumar2105/APIWatch</a>
-    </footer>
+    </aside>
   </div>
+
+  <footer class="foot">
+    <p>Built by Rachit Kumar Singh. Demo data may be reset at any time.</p>
+    <nav aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
+  </footer>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+  <template id="card-template">
+    <li class="card" draggable="true">
+      <div class="card-view">
+        <div class="card-top">
+          <svg class="icon grip" aria-hidden="true"><use href="#i-grip" /></svg>
+          <h3 class="card-title"></h3>
+        </div>
+        <p class="card-desc"></p>
+        <div class="card-foot">
+          <p class="card-meta"></p>
+          <div class="card-actions">
+            <button class="icon-button" type="button" data-action="back"><svg class="icon" aria-hidden="true"><use href="#i-left" /></svg></button>
+            <button class="icon-button" type="button" data-action="forward"><svg class="icon" aria-hidden="true"><use href="#i-right" /></svg></button>
+            <button class="icon-button" type="button" data-action="edit"><svg class="icon" aria-hidden="true"><use href="#i-edit" /></svg></button>
+            <button class="icon-button danger" type="button" data-action="delete"><svg class="icon" aria-hidden="true"><use href="#i-trash" /></svg></button>
+          </div>
+        </div>
+      </div>
+    </li>
+  </template>
+
+  <script src="/config.js"></script>
+  <script type="module" src="/assets/app.js?v=dev"></script>
 </body>
 </html>

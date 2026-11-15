@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'" />
+  <title>Privacy: APIWatch</title>
+  <meta name="theme-color" content="#13212c" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/assets/styles.css?v=dev" />
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="/" aria-label="APIWatch home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#13212c"/><circle cx="16" cy="16" r="9.5" fill="none" stroke="#d4dee6" stroke-width="2"/><path d="M16 16V10.5M16 16h4.5" fill="none" stroke="#d4dee6" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="6.5" r="1.6" fill="#79d0a6"/></svg>
+      <span>APIWatch</span>
+    </a>
+  </header>
+  <main class="page" id="main">
+    <h1>Privacy</h1>
+    <p class="updated">Last updated 16 November 2026</p>
+    <p>APIWatch is a portfolio demo of a task-management API. It collects as little as it can to work.</p>
+
+    <h2>What the API stores</h2>
+    <ul>
+      <li>Your username and a bcrypt hash of your password. The password itself is never stored.</li>
+      <li>The tasks you create: title, details, status, timestamps and a version number.</li>
+      <li>Idempotency keys your browser sends with new tasks, so a retried request can be recognised.</li>
+    </ul>
+    <p>Guest sessions use a randomly generated username and password. Nothing about you is attached to them.</p>
+
+    <h2>Where it lives</h2>
+    <p>
+      The API runs on Hugging Face Spaces and this site on Vercel. The demo database may be reset at any
+      time, for example when the Space restarts, and everything in it is deleted when that happens.
+      Both hosts keep standard server logs (such as IP addresses and request times) under their own
+      privacy policies.
+    </p>
+
+    <h2>In your browser</h2>
+    <p>
+      Your sign-in token is kept in this tab&rsquo;s session storage and is removed when you close the tab
+      or sign out. A guest session also keeps its generated password there so it can renew its token.
+      There are no cookies, no analytics, no ads and no third-party scripts or fonts.
+    </p>
+
+    <h2>Please don&rsquo;t</h2>
+    <p>Enter personal, confidential or sensitive information in tasks, or reuse a password you use anywhere else.</p>
+
+    <h2>Questions or deletion</h2>
+    <p>
+      Open an issue on the <a href="https://github.com/rachitkumar2105/APIWatch/issues">project&rsquo;s GitHub page</a>
+      with your username and the account and its tasks will be deleted.
+    </p>
+  </main>
+  <footer class="foot page-foot">
+    <p>Built by Rachit Kumar Singh.</p>
+    <nav aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
+  </footer>
+</body>
+</html>

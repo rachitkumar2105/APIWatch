@@ -1,0 +1,104 @@
+# Deploying APIWatch
+
+Two independent pieces:
+
+| Piece | Host | What gets deployed |
+|---|---|---|
+| API | Hugging Face Spaces (Docker SDK) | `Dockerfile`, `.dockerignore`, `requirements.txt`, `app/`, plus `deploy/huggingface/README.md` as the Space card |
+| Frontend | Vercel | `frontend/`, built by `frontend/scripts/build.mjs` into `frontend/dist/` |
+
+Deploy the API first: the frontend build needs its URL, and the API needs the frontend's URL for CORS.
+
+## 1. API on Hugging Face Spaces
+
+### Option A: deploy script (recommended)
+
+Needs Python, `pip install huggingface_hub`, and a Hugging Face access token with write access
+(Settings > Access Tokens). A fine-grained token limited to the Space is enough once it exists; to
+let the script create the Space, the token needs permission to create repos under your account.
+
+```bash
+export HF_TOKEN=hf_xxx          # PowerShell: $env:HF_TOKEN = "hf_xxx"
+python scripts/deploy_hf_space.py --space <hf-username>/apiwatch-api
+```
+
+On the first run this creates a public Docker Space, generates a random 64-character
+`JWT_SECRET_KEY` and stores it as a Space secret (it is never printed or saved locally), then
+uploads the files. Later runs only upload the code. The script prints the API URL:
+`https://<hf-username>-apiwatch-api.hf.space`.
+
+### Option B: by hand on huggingface.co
+
+1. New Space: SDK **Docker**, template **Blank**, visibility **Public** (the browser must be able to reach it).
+2. Upload `Dockerfile`, `.dockerignore`, `requirements.txt`, the `app/` folder, and
+   `deploy/huggingface/README.md` renamed to `README.md` at the Space root.
+3. Settings > Variables and secrets: add the secret `JWT_SECRET_KEY` (generate one with
+   `python -c "import secrets; print(secrets.token_urlsafe(48))"`).
+
+### Check it
+
+The build takes a few minutes. Then:
+
+- `https://<hf-username>-apiwatch-api.hf.space/health/ready` returns `{"status":"ready"}`
+- `https://<hf-username>-apiwatch-api.hf.space/docs` shows the interactive docs
+
+If the Space shows a runtime error mentioning `JWT_SECRET_KEY`, the secret is missing or shorter
+than 32 characters: production mode refuses to start without it, by design.
+
+### API environment
+
+The image already sets `APP_ENV=production`, `TRUST_PROXY_HEADERS=true`, `PORT=7860` and a SQLite
+path. Set these under Settings > Variables and secrets:
+
+| Name | Kind | Required | Value |
+|---|---|---|---|
+| `JWT_SECRET_KEY` | Secret | Yes | 32+ random characters (the script sets this) |
+| `CORS_ORIGINS` | Variable | Yes, once the frontend exists | `https://<your-app>.vercel.app` (comma-separate several; no trailing slash) |
+| `CORS_ORIGIN_REGEX` | Variable | No | e.g. `^https://apiwatch-[a-z0-9-]+-<team>\.vercel\.app$` to allow Vercel preview URLs |
+| `DATABASE_URL` | Secret | No | Postgres URL for data that survives restarts, e.g. from Neon: `postgresql://user:pass@host/db?sslmode=require` |
+| `METRICS_TOKEN` | Secret | No | Enables `/metrics` behind `Authorization: Bearer <token>` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Variable | No | Default 30 |
+
+Changing a variable or secret restarts the Space.
+
+**About data:** without `DATABASE_URL`, data lives in SQLite inside the container and is wiped
+whenever the Space restarts or rebuilds. That's acceptable for guest demo sessions. For anything
+you want to keep, create a free Postgres database (Neon or Supabase) and set `DATABASE_URL`;
+tables are created automatically on startup.
+
+## 2. Frontend on Vercel
+
+1. Vercel > Add New > Project > import the `APIWatch` GitHub repository.
+2. **Root Directory: `frontend`**. Framework preset: Other. Build and output settings come from
+   `frontend/vercel.json` (`npm run build`, output `dist`), so leave them as they are.
+3. Environment variable: `APIWATCH_API_URL` = `https://<hf-username>-apiwatch-api.hf.space`
+   (https, no trailing slash). The build fails with a clear message if it's missing.
+4. Deploy. Note the production URL, e.g. `https://apiwatch.vercel.app`.
+
+The build writes `dist/config.js` from that variable and narrows each page's
+Content-Security-Policy `connect-src` to exactly that API origin. `vercel.json` adds the other
+security headers (HSTS, `nosniff`, framing denied, referrer and permissions policies).
+
+## 3. Connect the two
+
+Back in the Space settings, set `CORS_ORIGINS` to the Vercel production URL (and
+`CORS_ORIGIN_REGEX` if you want preview deployments to work). Open the Vercel URL: the header
+should show "API ready", and "Start a guest session" should land on an empty board with requests
+appearing in the log.
+
+If the log shows `ERR` for every request while `/health/ready` works in a normal tab, it's CORS:
+the origin in `CORS_ORIGINS` must match the browser's address bar exactly (scheme, host, no slash).
+
+## 4. Keeping it updated
+
+- **Frontend**: every push to `main` redeploys on Vercel automatically.
+- **API**: run `scripts/deploy_hf_space.py` again, or let GitHub Actions do it:
+  add the repository secret `HF_TOKEN` (write token) and repository variable `HF_SPACE`
+  (`<hf-username>/apiwatch-api`). `.github/workflows/deploy-backend.yml` then deploys on every
+  push to `main` that touches the API. Without them the workflow skips itself.
+
+## Before calling it launch-ready
+
+- A custom domain on Vercel (Project > Settings > Domains), then add it to `CORS_ORIGINS`.
+- Persistent database via `DATABASE_URL` if the data should survive restarts.
+- Revoke any access tokens created only for the first deploy.

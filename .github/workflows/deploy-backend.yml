@@ -1,0 +1,47 @@
+name: Deploy API to Hugging Face
+
+# Runs after a push to main that touches the API, or on demand.
+# Needs repository secret HF_TOKEN (write token) and repository variable
+# HF_SPACE (e.g. rachitkumar2105/apiwatch-api). Without them it skips.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "requirements.txt"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "deploy/huggingface/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-hf
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_SPACE: ${{ vars.HF_SPACE }}
+    steps:
+      - name: Skip when not configured
+        if: env.HF_TOKEN == '' || env.HF_SPACE == ''
+        run: echo "::notice::HF_TOKEN secret or HF_SPACE variable not set; skipping deploy."
+
+      - uses: actions/checkout@v4
+        if: env.HF_TOKEN != '' && env.HF_SPACE != ''
+
+      - uses: actions/setup-python@v5
+        if: env.HF_TOKEN != '' && env.HF_SPACE != ''
+        with:
+          python-version: "3.12"
+
+      - name: Upload to the Space
+        if: env.HF_TOKEN != '' && env.HF_SPACE != ''
+        run: |
+          pip install "huggingface_hub>=0.26"
+          python scripts/deploy_hf_space.py --space "$HF_SPACE"

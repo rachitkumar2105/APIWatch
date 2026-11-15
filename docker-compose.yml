@@ -1,11 +1,21 @@
+# Local observability stack: API + Prometheus + Grafana.
+# Copy .env.example to .env first if you want to change any of the defaults below.
 services:
   api:
     build: .
     ports:
       - "8000:8000"
-    # DB lives inside the container for this demo stack — it resets on
-    # `docker compose down`. Bind-mounting a single SQLite file is a known
-    # Docker footgun (a missing host file gets created as a directory).
+    environment:
+      PORT: "8000"
+      # Development mode: /metrics stays open for Prometheus, and the default
+      # JWT secret only logs a warning instead of refusing to start.
+      APP_ENV: "development"
+      TRUST_PROXY_HEADERS: "false"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-insecure-secret-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4173,http://127.0.0.1:4173}
+    # The SQLite file lives inside the container and resets on `docker compose down`.
+    # Bind-mounting a single SQLite file is a known Docker footgun (a missing
+    # host file gets created as a directory).
 
   prometheus:
     image: prom/prometheus:latest

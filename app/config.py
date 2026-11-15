@@ -25,7 +25,7 @@ def split_csv(value: str) -> list[str]:
 
 # Exact origins allowed to call the API from a browser. Never a wildcard.
 CORS_ORIGINS = split_csv(
-    os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:4173,http://127.0.0.1:4173")
+    os.getenv("CORS_ORIGINS") or "http://localhost:3000,http://localhost:4173,http://127.0.0.1:4173"
 )
 # Optional regex for origins that can't be listed up front, e.g. Vercel preview
 # deployments: ^https://apiwatch-[a-z0-9-]+-rachitkumar2105s-projects\.vercel\.app$

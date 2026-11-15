@@ -36,7 +36,8 @@ def engine_options(url: str) -> dict:
     return {"pool_pre_ping": True, "pool_recycle": 300}
 
 
-DATABASE_URL = normalize_database_url(os.getenv("DATABASE_URL", "sqlite:///./apiwatch.db"))
+# "or": a variable that exists but is empty (common in hosting dashboards) means "unset".
+DATABASE_URL = normalize_database_url(os.getenv("DATABASE_URL") or "sqlite:///./apiwatch.db")
 ensure_sqlite_directory(DATABASE_URL)
 
 engine = create_engine(DATABASE_URL, **engine_options(DATABASE_URL))

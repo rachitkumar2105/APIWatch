@@ -6,7 +6,7 @@ Deliberately kept deterministic and simple — no AI/LLM components — so every
 
 ## Live demo
 
-- **App:** https://apiwatch.vercel.app (frontend on Vercel)
+- **App:** https://apiwatch-rachit.vercel.app (frontend on Vercel)
 - **API:** https://apiwatch-api-4jxd.onrender.com (FastAPI in Docker on Render's free plan, interactive docs at [`/docs`](https://apiwatch-api-4jxd.onrender.com/docs))
 
 The app is a task board whose every click is a real API call, shown live in a request log beside it: the status code, the time it took, and what the server decided. "Start a guest session" gives you a private throwaway account. Two buttons replay the interesting cases on demand: the same create sent twice with one `Idempotency-Key` (one task, not two), and a save based on a stale version (`409`, nothing overwritten).

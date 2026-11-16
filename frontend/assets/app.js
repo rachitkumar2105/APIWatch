@@ -260,6 +260,10 @@ async function authed(method, path, options = {}, retried = false) {
       renew: true,
     });
     if (renewed) return authed(method, path, options, true);
+    // The guest's own credentials were refused, so the account itself is gone:
+    // the free-tier demo database was reset (restart or redeploy).
+    endSession("The demo data was reset, so this guest board is gone. Start a new guest session to continue.");
+    return result;
   }
   endSession("Your session expired. Sign in again to continue.");
   return result;

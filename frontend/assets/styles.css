@@ -176,6 +176,7 @@ button {
 }
 
 .brand {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -191,6 +192,7 @@ button {
 }
 
 .bar-status {
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1135,13 +1137,10 @@ button {
   }
 }
 
-@media (max-width: 560px) {
-  .bar {
-    gap: 12px;
-    padding: 0 12px;
-  }
-  .nav-link span,
-  .bar-status .status-text {
+/* The top bar has to hold brand, status, two links and the account. Collapse
+   the links to icons (their text stays as the accessible name) before it wraps. */
+@media (max-width: 1100px) {
+  .nav-link span {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -1153,6 +1152,22 @@ button {
     width: 40px;
     justify-content: center;
     padding: 0;
+  }
+}
+@media (max-width: 720px) {
+  .bar-status .status-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+@media (max-width: 560px) {
+  .bar {
+    gap: 12px;
+    padding: 0 12px;
   }
   .account-name {
     max-width: 96px;
